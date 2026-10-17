@@ -1,0 +1,31 @@
+# Segredos — nunca versionar
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Testes e cobertura
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Ferramentas
+.ruff_cache/
+
+# Bancos locais (SQLite de teste)
+*.db
+*.sqlite3
+
+# IDE / SO
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
