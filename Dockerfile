@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- Etapa 1: instala dependências num venv isolado ----
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -11,7 +11,7 @@ RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install -r /tmp/requirements.txt
 
 # ---- Etapa 2: imagem final enxuta, sem ferramentas de build ----
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ARG APP_VERSION=dev
 ENV PATH="/opt/venv/bin:$PATH" \
