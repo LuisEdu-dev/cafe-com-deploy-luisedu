@@ -82,3 +82,20 @@ jobs:
             echo "- \`$IMAGEM_VERSAO\`"
             echo "- digest: \`$DIGEST\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  staging:
+    needs: build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ambiente: staging
+      versao: ${{ needs.build.outputs.versao }}
+    secrets: inherit
+
+  production:
+    # Pausa aqui até a aprovação manual no environment "production".
+    needs: [build, staging]
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ambiente: production
+      versao: ${{ needs.build.outputs.versao }}
+    secrets: inherit
