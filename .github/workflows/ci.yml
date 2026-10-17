@@ -1,9 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  # Na main, o CI roda como primeira etapa do CD (cd.yml).
   workflow_call:
 
 permissions:
