@@ -13,7 +13,7 @@ import pytest  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine, delete, select  # noqa: E402
+from sqlalchemy import create_engine, delete, make_url, select  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from app.db import get_db  # noqa: E402
@@ -58,3 +58,8 @@ def client(db_session):
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
+
+
+def pytest_report_header():
+    url = make_url(TEST_DATABASE_URL)
+    return f"banco de teste: {url.render_as_string(hide_password=True)}"
