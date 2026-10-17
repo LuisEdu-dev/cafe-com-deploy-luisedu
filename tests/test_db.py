@@ -44,3 +44,22 @@ def test_preco_volta_como_float(db_session):
     cafe = db_session.scalars(select(Cafe).order_by(Cafe.id)).first()
 
     assert isinstance(cafe.preco, float)
+
+
+def test_migration_3_preserva_compatibilidade_com_codigo_antigo(engine):
+    # Código anterior à Migration 3 insere sem conhecer a coluna "origem".
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO cafes (nome, preco) VALUES ('Café Legado', 5)"))
+        origem = conn.execute(text("SELECT origem FROM cafes WHERE nome = 'Café Legado'")).scalar()
+        conn.execute(text("DELETE FROM cafes WHERE nome = 'Café Legado'"))
+
+    assert origem == "Cerrado Mineiro"
+
+
+def test_migration_3_pode_ser_revertida(engine, alembic_config):
+    command.downgrade(alembic_config, "0002")
+    colunas = {coluna["name"] for coluna in inspect(engine).get_columns("cafes")}
+    command.upgrade(alembic_config, "head")
+
+    assert "origem" not in colunas
+    assert "origem" in {coluna["name"] for coluna in inspect(engine).get_columns("cafes")}

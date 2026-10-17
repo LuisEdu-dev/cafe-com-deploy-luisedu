@@ -16,9 +16,15 @@ app = FastAPI(title="Café com Deploy")
 DB = Annotated[Session, Depends(get_db)]
 
 
+def cardapio_com_origem() -> bool:
+    # Feature flag: ligada em staging, desligada em produção até a validação.
+    return os.getenv("FEATURE_CARDAPIO_ORIGEM", "false").lower() in {"1", "true", "on"}
+
+
 class CafeEntrada(BaseModel):
     nome: str = Field(min_length=1, max_length=80)
     preco: float = Field(gt=0, lt=10000)
+    origem: str | None = Field(default=None, min_length=1, max_length=60)
 
 
 class CafeSaida(BaseModel):
@@ -27,6 +33,7 @@ class CafeSaida(BaseModel):
     id: int
     nome: str
     preco: float
+    origem: str | None = None
 
 
 class PrecoSaida(BaseModel):
@@ -44,6 +51,13 @@ def buscar_cafe(db: Session, cafe_id: int) -> Cafe:
     return cafe
 
 
+def para_saida(cafe: Cafe) -> CafeSaida:
+    saida = CafeSaida.model_validate(cafe)
+    if not cardapio_com_origem():
+        saida.origem = None
+    return saida
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -54,26 +68,32 @@ def version():
     return {"version": os.getenv("APP_VERSION", "dev")}
 
 
-@app.get("/cafes", response_model=list[CafeSaida])
+@app.get("/cafes", response_model=list[CafeSaida], response_model_exclude_none=True)
 def listar_cafes(db: DB):
-    return db.scalars(select(Cafe).order_by(Cafe.id)).all()
+    return [para_saida(cafe) for cafe in db.scalars(select(Cafe).order_by(Cafe.id))]
 
 
-@app.post("/cafes", response_model=CafeSaida, status_code=status.HTTP_201_CREATED)
+@app.post(
+    "/cafes",
+    response_model=CafeSaida,
+    response_model_exclude_none=True,
+    status_code=status.HTTP_201_CREATED,
+)
 def criar_cafe(dados: CafeEntrada, db: DB):
-    cafe = Cafe(nome=dados.nome, preco=dados.preco)
+    cafe = Cafe(**dados.model_dump(exclude_none=True))
     db.add(cafe)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "Já existe um café com esse nome") from None
-    return cafe
+    db.refresh(cafe)
+    return para_saida(cafe)
 
 
-@app.get("/cafes/{cafe_id}", response_model=CafeSaida)
+@app.get("/cafes/{cafe_id}", response_model=CafeSaida, response_model_exclude_none=True)
 def obter_cafe(cafe_id: int, db: DB):
-    return buscar_cafe(db, cafe_id)
+    return para_saida(buscar_cafe(db, cafe_id))
 
 
 @app.get("/cafes/{cafe_id}/preco", response_model=PrecoSaida)

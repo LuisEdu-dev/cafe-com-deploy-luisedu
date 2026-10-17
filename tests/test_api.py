@@ -85,3 +85,30 @@ def test_desconto_negativo_e_recusado(client):
         client.get(f"/cafes/{primeiro_id(client)}/preco", params={"desconto": -5}).status_code
         == 422
     )
+
+
+def test_flag_desligada_esconde_origem(client, monkeypatch):
+    monkeypatch.setenv("FEATURE_CARDAPIO_ORIGEM", "false")
+
+    cafes = client.get("/cafes").json()
+
+    assert all("origem" not in cafe for cafe in cafes)
+
+
+def test_flag_ligada_mostra_origem(client, monkeypatch):
+    monkeypatch.setenv("FEATURE_CARDAPIO_ORIGEM", "true")
+
+    cafes = client.get("/cafes").json()
+
+    assert all(cafe["origem"] == "Cerrado Mineiro" for cafe in cafes)
+
+
+def test_cria_cafe_com_origem(client, monkeypatch):
+    monkeypatch.setenv("FEATURE_CARDAPIO_ORIGEM", "true")
+
+    criado = client.post(
+        "/cafes", json={"nome": "Bourbon Sul de Minas", "preco": 11, "origem": "Sul de Minas"}
+    )
+
+    assert criado.status_code == 201
+    assert client.get(f"/cafes/{criado.json()['id']}").json()["origem"] == "Sul de Minas"
