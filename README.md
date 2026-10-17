@@ -206,9 +206,12 @@ Histórico de entregas, sempre por PR com CI verde e Conventional Commits:
 
 ## Referências
 
-- HUMBLE, Jez; FARLEY, David. *Entrega Contínua: como entregar software de forma rápida e confiável*. Porto Alegre: Bookman, 2014.
+- HUMBLE, Jez; FARLEY, David. *Entrega contínua: como entregar software de forma rápida e confiável*. Porto Alegre: Bookman, 2014.
+- FORSGREN, Nicole; HUMBLE, Jez; KIM, Gene. *Accelerate: the science of lean software and DevOps*. Portland: IT Revolution, 2018.
+- KIM, Gene et al. *Manual de DevOps: como obter agilidade, confiabilidade e segurança em organizações tecnológicas*. Rio de Janeiro: Alta Books, 2018.
 - WIGGINS, Adam. *The Twelve-Factor App*. Disponível em: https://12factor.net/pt_br/.
-- FORSGREN, Nicole; HUMBLE, Jez; KIM, Gene. *Accelerate*. IT Revolution, 2018 (métricas DORA).
+- GITHUB. *Documentação do GitHub Actions*. Disponível em: https://docs.github.com/pt/actions.
+- DORA. *DORA's software delivery metrics*. Disponível em: https://dora.dev/.
 
 ## Rodando localmente
 ```powershell
