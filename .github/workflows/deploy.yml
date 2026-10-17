@@ -1,0 +1,69 @@
+name: Deploy
+
+# Reutilizado pelo CD (staging e produção) e pelo rollback.
+on:
+  workflow_call:
+    inputs:
+      ambiente:
+        description: staging ou production
+        required: true
+        type: string
+      versao:
+        description: Tag da imagem no GHCR (ex. sha-abc1234)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: deploy (${{ inputs.ambiente }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ inputs.ambiente }}
+      url: ${{ vars.APP_URL }}
+    env:
+      HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+      APP_URL: ${{ vars.APP_URL }}
+      AMBIENTE: ${{ inputs.ambiente }}
+      VERSAO: ${{ inputs.versao }}
+      IMAGEM: ghcr.io/luisedu-dev/cafe-com-deploy-luisedu:${{ inputs.versao }}
+    steps:
+      - name: Disparar deploy no Render
+        run: |
+          if [ -z "$HOOK" ] || [ -z "$APP_URL" ]; then
+            echo "::error::RENDER_DEPLOY_HOOK ou APP_URL não configurados no environment"
+            exit 1
+          fi
+          img=$(jq -rn --arg v "$IMAGEM" '$v | @uri')
+          curl -fsS -o /dev/null -X POST "${HOOK}&imgURL=${img}"
+          echo "Deploy de $IMAGEM solicitado"
+
+      - name: Smoke test
+        run: |
+          # Render free dorme e demora a subir: até 20 tentativas a cada 15s.
+          for i in $(seq 1 20); do
+            atual=$(curl -fsS --max-time 30 "$APP_URL/version" | jq -r .version || true)
+            echo "tentativa $i: versão no ar = ${atual:-indisponível} (esperada $VERSAO)"
+            if [ "$atual" = "$VERSAO" ]; then
+              curl -fsS "$APP_URL/health" | jq -e '.status == "ok"'
+              curl -fsS "$APP_URL/cafes" | jq -e 'length >= 5'
+              echo "Smoke test OK"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::$APP_URL não passou a servir $VERSAO a tempo"
+          exit 1
+
+      - name: Resumo
+        if: always()
+        run: |
+          {
+            echo "### Deploy em $AMBIENTE"
+            echo "- imagem: \`$IMAGEM\`"
+            echo "- url: $APP_URL"
+            echo "- concluído: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_STEP_SUMMARY"
