@@ -58,17 +58,20 @@ flowchart LR
 
 ## 3. Diagnóstico dos antipadrões
 
-| Antipadrão na Café com Deploy original | Risco | Como o pipeline resolve |
-|---|---|---|
-| Deploy manual, feito "na mão" no servidor | Passos esquecidos, nada rastreável, deploy depende de uma pessoa | CD automatizado: o merge na main gera imagem, staging e produção com o mesmo `deploy.yml` |
-| Commits direto na main | Código não revisado e quebrado chega a produção | Ruleset `protege-main`: PR obrigatório e check `qualidade` obrigatório. O PR #9 provou o bloqueio |
-| Sem testes automatizados | Regressões só aparecem com o cliente (ex.: desconto de 80% aceito) | 31 testes em 3 camadas, cobertura mínima de 70% exigida no CI (atual: 93,53%) |
-| "Funciona na minha máquina" | Ambiente de produção diferente do de desenvolvimento | Imagem Docker multi-stage, a mesma do teste à produção. Testes de CI contra Postgres 16 de verdade |
-| Segredos no código ou no repositório | Vazamento de banco e de hooks | Só `.env.example` versionado. Segredos em *environments* e no Render. `.env` no `.gitignore` e no `.dockerignore` |
-| Alteração manual do schema em produção | Banco divergente do código, sem volta | Migrations Alembic versionadas e testadas do zero no CI, aplicadas pelo `scripts/start.py` |
-| Sem ambiente de homologação | O primeiro teste real acontece em produção | Staging com banco próprio (Neon) recebe toda versão antes da produção |
-| Sem plano de rollback | Incidente vira madrugada de correção às pressas | `rollback.yml`: volta para qualquer tag do GHCR em menos de 2 min (medido no Game Day) |
-| Dependências sem versão fixa e sem auditoria | Builds não reproduzíveis e CVEs conhecidas | Versões fixadas com `==`, `pip-audit` no CI, Dependabot semanal para pip, Actions e Docker |
+Os sete primeiros antipadrões vêm da tabela 3.1 do enunciado. Os três seguintes são do cenário da Café com Deploy. A fundamentação vem de Humble & Farley, *Entrega Contínua*, cujo capítulo 1 descreve os três primeiros antipadrões com esses nomes, e do *Twelve-Factor App* (12factor.net).
+
+| # | Antipadrão | Prática adotada | Evidência no repositório | Fundamentação |
+|---|---|---|---|---|
+| 1 | Implantar manualmente (FTP, SSH, passo a passo no Word) | Pipeline disparado por merge | `cd.yml`: merge na main → CI → imagem no GHCR → staging → produção, sempre pelo mesmo `deploy.yml` | Humble & Farley: implantação manual é propensa a erro e não repetível; o processo deve ser automatizado e idêntico em todo ambiente. 12-Factor V (separar *build*, *release* e *run*) |
+| 2 | Testar em ambiente parecido com produção só no final | Staging com a mesma imagem | Toda versão passa por staging (banco Neon próprio) com a **mesma** tag `sha-<commit>` que depois é promovida, sem rebuild | Humble & Farley: implantar em ambiente similar ao de produção desde cedo e a cada mudança. 12-Factor X (paridade entre desenvolvimento e produção) |
+| 3 | Configuração de ambientes à mão | Variáveis de ambiente + GitHub Environments | `APP_URL` e `RENDER_DEPLOY_HOOK` por *environment*; `DATABASE_URL`, `DESCONTO_MAXIMO` e `FEATURE_CARDAPIO_ORIGEM` lidos do ambiente | Humble & Farley: a configuração de produção deve ser gerenciada e versionada, não ajustada à mão. 12-Factor III (configuração no ambiente) |
+| 4 | "Funciona na minha máquina" | Container Docker reprodutível | `Dockerfile` multi-stage, usuário não-root e `HEALTHCHECK`; o CI constrói e testa o container em todo PR; `docker-compose.yml` para rodar localmente | Humble & Farley: o mesmo binário do commit até produção. 12-Factor II (dependências declaradas e isoladas) e X |
+| 5 | `ALTER TABLE` manual em produção | Migrations versionadas pelo pipeline | 3 migrations Alembic testadas do zero no CI e aplicadas pelo `scripts/start.py` ao subir o container (seção 5) | Humble & Farley, cap. 12 (gerência de dados): mudanças de banco versionadas, automatizadas e retrocompatíveis. 12-Factor XII (tarefas administrativas com o mesmo código da release) |
+| 6 | Senha do banco no código | Secrets do GitHub + `.env` no `.gitignore` | Só `.env.example` sem segredos versionado; segredos em *environments* e no Render; passados aos passos por `env:` | 12-Factor III: credenciais nunca no código. Humble & Farley: nada de senhas no controle de versão |
+| 7 | Dependências "na última versão" | Versões fixadas + Dependabot + pip-audit | `requirements*.txt` com `==`, `pip-audit` no CI, Dependabot semanal (pip, Actions, Docker); PR #7 avaliado e fechado com justificativa | 12-Factor II: declarar todas as dependências de forma explícita. Humble & Farley: builds reproduzíveis exigem dependências fixadas |
+| 8 | Sem registro da versão que está rodando | `/version` + tag `sha` | `GET /version` devolve `sha-<commit>` (via `APP_VERSION` no build); o smoke test só passa quando a versão no ar é a esperada | Humble & Farley: rastreabilidade de cada binário até o commit que o gerou. 12-Factor V (cada release tem um identificador único) |
+| 9 | Sem rollback | Workflow de rollback | `rollback.yml` volta para qualquer tag do GHCR: **1 min 54 s** no Game Day, com o banco à frente da imagem (seção 5) | Humble & Farley: ter um plano de rollback testado é pré-requisito para implantar com frequência. 12-Factor V (releases imutáveis permitem voltar) |
+| 10 | Deploy de uma pessoa só, sem revisão | PR obrigatório + CI + aprovação manual | Ruleset `protege-main` com check `qualidade` obrigatório (o PR #9 foi bloqueado); environment `production` com *required reviewer* | Humble & Farley: o pipeline de implantação como única rota para produção, com *gates* visíveis e auditáveis |
 
 ## 4. Estratégia de testes
 
@@ -181,7 +184,7 @@ O pipeline faz **entrega contínua**, não **implantação contínua**. Todo mer
 
 | Integrante | Matrícula | GitHub | Papéis |
 |---|---|---|---|
-| Luis Eduardo Vieira Barros | `MATRÍCULA` | [@LuisEdu-dev](https://github.com/LuisEdu-dev) | Release Manager, Guardião dos Testes, Eng. de Plataforma, DBA, Documentador (trabalho individual) |
+| Luis Eduardo Vieira Barros | 82601738 | [@LuisEdu-dev](https://github.com/LuisEdu-dev) | Release Manager, Guardião dos Testes, Eng. de Plataforma, DBA, Documentador (trabalho individual) |
 
 Histórico de entregas, sempre por PR com CI verde e Conventional Commits:
 - [#1](https://github.com/LuisEdu-dev/cafe-com-deploy-luisedu/pull/1) estrutura inicial
@@ -198,6 +201,14 @@ Histórico de entregas, sempre por PR com CI verde e Conventional Commits:
 | 🐘 **Banco de verdade** | CI roda os testes contra Postgres 16 em service container (`ci.yml`, `TEST_DATABASE_URL`) |
 | 🔀 **Interruptor** | Feature flag `FEATURE_CARDAPIO_ORIGEM`: ligada em staging (`/cafes` mostra `origem`), desligada em produção |
 | 📊 **Painel DORA** | Métricas calculadas do histórico real por [`tools/dora.py`](tools/dora.py) (seção 6) |
+
+**Próximo passo: Infra como código (conquista opcional, não feita).** Hoje os serviços do Render e os projetos Neon foram criados pelo painel. O próximo passo seria descrevê-los num `render.yaml` (Blueprint) com os dois serviços baseados em imagem e as variáveis não secretas, marcando os segredos com `sync: false`. Ficou de fora porque aplicar um Blueprint cria serviços novos, com URLs e deploy hooks novos. Às vésperas da entrega, isso exigiria refazer `APP_URL`, os secrets e os links deste relatório.
+
+## Referências
+
+- HUMBLE, Jez; FARLEY, David. *Entrega Contínua: como entregar software de forma rápida e confiável*. Porto Alegre: Bookman, 2014.
+- WIGGINS, Adam. *The Twelve-Factor App*. Disponível em: https://12factor.net/pt_br/.
+- FORSGREN, Nicole; HUMBLE, Jez; KIM, Gene. *Accelerate*. IT Revolution, 2018 (métricas DORA).
 
 ## Rodando localmente
 ```powershell
