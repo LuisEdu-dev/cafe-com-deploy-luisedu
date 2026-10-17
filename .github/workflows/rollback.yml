@@ -1,0 +1,55 @@
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente que volta de versão
+        required: true
+        type: choice
+        options: [production, staging]
+      versao:
+        description: Tag de imagem já publicada (ex. sha-abc1234)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-main
+  cancel-in-progress: false
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      versao: ${{ steps.checar.outputs.versao }}
+    steps:
+      - name: Conferir se a imagem existe no GHCR
+        id: checar
+        env:
+          VERSAO: ${{ inputs.versao }}
+          REPO: luisedu-dev/cafe-com-deploy-luisedu
+        run: |
+          if ! [[ "$VERSAO" =~ ^(sha-[0-9a-f]{7}|v[0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::Versão inválida: '$VERSAO' (use sha-abc1234)"
+            exit 1
+          fi
+          token=$(curl -fsS "https://ghcr.io/token?scope=repository:$REPO:pull" | jq -r .token)
+          curl -fsS -o /dev/null \
+            -H "Authorization: Bearer $token" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+            "https://ghcr.io/v2/$REPO/manifests/$VERSAO" \
+            || { echo "::error::Imagem $REPO:$VERSAO não encontrada"; exit 1; }
+          echo "versao=$VERSAO" >> "$GITHUB_OUTPUT"
+          echo "Início do rollback: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_STEP_SUMMARY"
+
+  rollback:
+    needs: validar
+    uses: ./.github/workflows/deploy.yml
+    with:
+      ambiente: ${{ inputs.ambiente }}
+      versao: ${{ needs.validar.outputs.versao }}
+    secrets: inherit
