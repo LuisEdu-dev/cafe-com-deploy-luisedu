@@ -61,3 +61,38 @@ jobs:
 
       - name: Testes com cobertura
         run: pytest
+
+  imagem:
+    # Valida o Dockerfile em PRs; no CD a imagem é construída e publicada pelo job de build.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Construir imagem
+        run: docker build --build-arg APP_VERSION=ci -t cafe:ci .
+
+      - name: Subir container e aguardar HEALTHCHECK
+        run: |
+          docker run -d --name cafe -p 8080:8080 \
+            -e PORT=8080 -e DATABASE_URL=sqlite:////tmp/cafe.db cafe:ci
+          for i in $(seq 1 30); do
+            estado=$(docker inspect -f '{{.State.Health.Status}}' cafe)
+            echo "tentativa $i: $estado"
+            [ "$estado" = "healthy" ] && break
+            sleep 3
+          done
+          [ "$estado" = "healthy" ]
+
+      - name: Smoke test
+        run: |
+          curl -fsS http://localhost:8080/health
+          curl -fsS http://localhost:8080/version | grep '"ci"'
+          curl -fsS http://localhost:8080/cafes | grep 'Espresso Esplanada'
+
+      - name: Logs do container
+        if: always()
+        run: docker logs cafe || true
